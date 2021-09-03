@@ -4,35 +4,77 @@ on: push
 jobs:
   build:
     # this is to prevent the job to run at forked projects
-    if: github.repository == 'kubernetes-sigs/aws-fsx-csi-driver'
+#    if: github.repository == 'kubernetes-sigs/aws-fsx-csi-driver'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Build container image
+    - uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+      with:
+        registries: 335566905560
+
+    - name: "Setup Docker Buildx"
+      uses: docker/setup-buildx-action@v1
+      id: buildx
+      with:
+        install: true
+        buildkitd-flags: --debug
+
+    - name: "Setup Docker Buildx Builder"
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: docker run --privileged --rm tonistiigi/binfmt --install all
+
+    - name: Build container images
+      env:
+        ARM_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:arm64
+        AMD_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:amd64
       run: |
-        docker build -t aws-fsx-csi-driver .
-    - name: Push to Github registry
+        docker buildx build --load --platform=linux/arm64 -t $ARM_IMAGE_NAME .
+        docker buildx build --load --platform=linux/amd64 -t $AMD_IMAGE_NAME .
+
+    - name: Push Docker images and create manifest
+      env:
+        ARM_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:arm64
+        AMD_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:amd64
       run: |
-        USER=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
-        BRANCH=$(echo $GITHUB_REF | cut -d'/' -f3)
-        IMAGE=aws-fsx-csi-driver
-        if [ "$BRANCH" = "master" ]; then
-          TAG="latest"
-        else
-          TAG=$BRANCH
-        fi
-        docker login docker.pkg.github.com -u $USER -p ${{ secrets.REGISTRY_TOKEN }}
-        docker tag aws-fsx-csi-driver docker.pkg.github.com/$GITHUB_REPOSITORY/$IMAGE:$TAG
-        docker push docker.pkg.github.com/$GITHUB_REPOSITORY/$IMAGE:$TAG
-    - name: Push to Dockerhub registry
-      run: |
-        BRANCH=$(echo $GITHUB_REF | cut -d'/' -f3)
-        REPO=amazon/aws-fsx-csi-driver
-        if [ "$BRANCH" = "master" ]; then
-          TAG="latest"
-        else
-          TAG=$BRANCH
-        fi
-        docker login -u ${{ secrets.DOCKERHUB_USER }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-        docker tag aws-fsx-csi-driver $REPO:$TAG
-        docker push $REPO:$TAG
+        docker push ARM_IMAGE_NAME
+        docker push AMD_IMAGE_NAME
+        docker manifest create ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:latest $ARM_IMAGE_NAME $AMD_IMAGE_NAME
+        docker manifest push ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:latest
+
+
+#    - name: Push to Github registry
+#      run: |
+#        USER=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
+#        BRANCH=$(echo $GITHUB_REF | cut -d'/' -f3)
+#        IMAGE=aws-fsx-csi-driver
+#        if [ "$BRANCH" = "master" ]; then
+#          TAG="latest"
+#        else
+#          TAG=$BRANCH
+#        fi
+#        docker login docker.pkg.github.com -u $USER -p ${{ secrets.REGISTRY_TOKEN }}
+#        docker tag aws-fsx-csi-driver docker.pkg.github.com/$GITHUB_REPOSITORY/$IMAGE:$TAG
+#        docker push docker.pkg.github.com/$GITHUB_REPOSITORY/$IMAGE:$TAG
+#    - name: Push to Dockerhub registry
+#      run: |
+#        BRANCH=$(echo $GITHUB_REF | cut -d'/' -f3)
+#        REPO=amazon/aws-fsx-csi-driver
+#        if [ "$BRANCH" = "master" ]; then
+#          TAG="latest"
+#        else
+#          TAG=$BRANCH
+#        fi
+#        docker login -u ${{ secrets.DOCKERHUB_USER }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+#        docker tag aws-fsx-csi-driver $REPO:$TAG
+#        docker push $REPO:$TAG
