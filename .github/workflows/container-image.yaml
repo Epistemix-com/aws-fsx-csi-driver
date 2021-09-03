@@ -47,8 +47,8 @@ jobs:
         ARM_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:arm64
         AMD_IMAGE_NAME: ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:amd64
       run: |
-        docker push ARM_IMAGE_NAME
-        docker push AMD_IMAGE_NAME
+        docker push $ARM_IMAGE_NAME
+        docker push $AMD_IMAGE_NAME
         docker manifest create ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:latest $ARM_IMAGE_NAME $AMD_IMAGE_NAME
         docker manifest push ${{ steps.login-ecr.outputs.registry }}/aws-fsx-csi-driver:latest
 
