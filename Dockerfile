@@ -19,7 +19,7 @@ COPY . .
 
 RUN make
 
-FROM amazonlinux:2
+FROM arm64v8/amazonlinux:2
 RUN yum install util-linux libyaml -y \
     && amazon-linux-extras install -y lustre2.10
 COPY --from=builder /go/src/github.com/kubernetes-sigs/aws-fsx-csi-driver/bin/aws-fsx-csi-driver /bin/aws-fsx-csi-driver
